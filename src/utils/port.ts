@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { exec } from "node:child_process";
 import net from "node:net";
 
 export async function isPortInUse(port: number): Promise<boolean> {
@@ -12,29 +12,27 @@ export async function isPortInUse(port: number): Promise<boolean> {
   });
 }
 
-export function killProcessOnPort(port: number) {
-  try {
+export async function killProcessOnPort(port: number): Promise<void> {
+  return new Promise((resolve) => {
     if (process.platform === "win32") {
-      execSync(
+      exec(
         `FOR /F "tokens=5" %a in ('netstat -ano ^| findstr :${port}') do taskkill /F /PID %a`,
-        { stdio: "ignore" },
+        { timeout: 3000 },
+        () => resolve(),
       );
     } else {
-      const pids = execSync(`lsof -ti:${port} 2>/dev/null || true`, {
-        encoding: "utf-8",
-      })
-        .trim()
-        .split("\n")
-        .filter(Boolean);
-      for (const pid of pids) {
-        try {
-          process.kill(Number(pid), "SIGKILL");
-        } catch {
-          // already dead
+      exec(`lsof -ti:${port} 2>/dev/null || true`, { timeout: 3000 }, (err, stdout) => {
+        if (stdout) {
+          for (const pid of stdout.trim().split("\n").filter(Boolean)) {
+            try {
+              process.kill(Number(pid), "SIGKILL");
+            } catch {
+              // already dead
+            }
+          }
         }
-      }
+        resolve();
+      });
     }
-  } catch {
-    // ignore — port may already be free
-  }
+  });
 }

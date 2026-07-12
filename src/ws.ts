@@ -1,4 +1,4 @@
-import { execSync } from "node:child_process";
+import { exec } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { WebSocketServer } from "ws";
@@ -10,17 +10,17 @@ import { isPortInUse, killProcessOnPort } from "@/utils/port";
 
 const bundleDir = path.dirname(new URL(import.meta.url).pathname);
 
-function getWslIp(): string | null {
-  try {
-    const result = execSync("hostname -I", { encoding: "utf-8", timeout: 3000 });
-    return result.trim().split(/\s+/)[0] || null;
-  } catch {
-    return null;
-  }
+async function getWslIp(): Promise<string | null> {
+  return new Promise((resolve) => {
+    exec("hostname -I", { timeout: 3000 }, (err, stdout) => {
+      if (err || !stdout) resolve(null);
+      else resolve(stdout.trim().split(/\s+/)[0] || null);
+    });
+  });
 }
 
-function writeExtensionConfig(port: number) {
-  const ip = getWslIp();
+async function writeExtensionConfig(port: number) {
+  const ip = await getWslIp();
   if (!ip) return;
 
   const configPath = path.resolve(bundleDir, "../extension/ws-config.json");
@@ -34,10 +34,10 @@ function writeExtensionConfig(port: number) {
 export async function createWebSocketServer(
   port: number = mcpConfig.defaultWsPort,
 ): Promise<WebSocketServer> {
-  killProcessOnPort(port);
+  await killProcessOnPort(port);
   while (await isPortInUse(port)) {
     await wait(100);
   }
-  writeExtensionConfig(port);
+  await writeExtensionConfig(port);
   return new WebSocketServer({ port, host: "0.0.0.0" });
 }
