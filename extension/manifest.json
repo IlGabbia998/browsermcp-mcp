@@ -3,6 +3,12 @@
   "name": "Browser MCP (Extended)",
   "version": "1.0.0",
   "description": "Extended Browser MCP extension with 36+ tools for browser automation",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "browser-mcp@extension",
+      "strict_min_version": "113.0"
+    }
+  },
   "permissions": [
     "activeTab",
     "tabs",
@@ -12,7 +18,8 @@
   ],
   "host_permissions": ["<all_urls>"],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
   },
   "action": {
     "default_popup": "popup.html",

@@ -79,7 +79,7 @@ function startFastPoll() {
   fastPollTimer = setInterval(() => {
     if (!connected) connect();
   }, FAST_POLL_INTERVAL_MS);
-  chrome.alarms.create("browserMcpFastPoll", { periodInMinutes: 0.05 });
+  chrome.alarms.create("browserMcpFastPoll", { periodInMinutes: 1 });
 }
 
 function stopFastPoll() {
@@ -92,7 +92,7 @@ function startKeepalive() {
   keepaliveTimer = setInterval(() => {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" }));
   }, KEEPALIVE_INTERVAL_MS);
-  chrome.alarms.create("browserMcpKeepalive", { periodInMinutes: 0.4 });
+  chrome.alarms.create("browserMcpKeepalive", { periodInMinutes: 1 });
 }
 
 function stopKeepalive() {
