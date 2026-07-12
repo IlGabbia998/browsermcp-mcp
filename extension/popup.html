@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { width: 280px; padding: 16px; font-family: -apple-system, sans-serif; }
+    h3 { margin: 0 0 8px; font-size: 14px; }
+    .status { padding: 8px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; margin-bottom: 12px; }
+    .connected { background: #dcfce7; color: #166534; }
+    .disconnected { background: #fee2e2; color: #991b1b; }
+    button { width: 100%; padding: 8px; border: none; border-radius: 6px; background: #3b82f6; color: white; font-size: 13px; cursor: pointer; }
+    button:hover { background: #2563eb; }
+    .tools { font-size: 11px; color: #666; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h3>Browser MCP (Extended)</h3>
+  <div id="status" class="status disconnected">Checking...</div>
+  <button id="reconnect">Reconnect</button>
+  <div class="tools">36+ tools | Port 9009</div>
+  <script src="popup.js"></script>
+</body>
+</html>

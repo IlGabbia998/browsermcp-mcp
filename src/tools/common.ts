@@ -6,7 +6,7 @@ import {
   NavigateTool,
   PressKeyTool,
   WaitTool,
-} from "@repo/types/mcp/tool";
+} from "@/lib/types/tool";
 
 import { captureAriaSnapshot } from "@/utils/aria-snapshot";
 
@@ -79,7 +79,7 @@ export const goForward: ToolFactory = (snapshot) => ({
   },
 });
 
-export const wait: Tool = {
+export const waitTool: Tool = {
   schema: {
     name: WaitTool.shape.name.value,
     description: WaitTool.shape.description.value,
