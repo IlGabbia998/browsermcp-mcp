@@ -14,14 +14,14 @@
 
 ## About
 
-Browser MCP is an MCP server + Chrome extension that allows you to automate your browser using AI applications like VS Code, Claude, Cursor, and Windsurf.
+Browser MCP is an MCP server + browser extension that allows you to automate your browser using AI applications like VS Code, Claude, Cursor, and Windsurf. Supports both **Chrome** and **Firefox**.
 
 This is a fork of the [original Browser MCP](https://github.com/browsermcp/mcp) with the following changes:
 
 - **Standalone build**: All monorepo dependencies (`@repo/*`, `@r2r/messaging`) replaced with local implementations
 - **Extended toolset**: 39 tools (up from 12 core tools) including tab management, JavaScript execution, cookie/storage access, CSS injection, network monitoring, and more
-- **Custom Chrome extension**: Full-featured extension with all 36 command handlers, compatible with the MCP server protocol
-- **WSL support**: Auto-detects WSL IP and writes a config file for the Chrome extension to discover the correct WebSocket address
+- **Cross-browser extension**: Full-featured extension with all 36 command handlers, compatible with both Chrome (MV3) and Firefox (MV3)
+- **WSL support**: Auto-detects WSL IP and writes a config file for the extension to discover the correct WebSocket address
 - **Connection resilience**: Speed guidance in tool descriptions, connection error detection with retry hints
 
 ## Features
@@ -36,8 +36,8 @@ This is a fork of the [original Browser MCP](https://github.com/browsermcp/mcp) 
 ### Prerequisites
 
 - Node.js >= 18
-- Google Chrome or Chromium browser
-- The Browser MCP Chrome extension (included in `extension/`)
+- Google Chrome, Chromium, or Firefox 113+
+- The Browser MCP extension (included in `extension/`)
 
 ### From source
 
@@ -48,12 +48,23 @@ npm install
 npm run build
 ```
 
-### Load the Chrome extension
+### Load the extension
+
+#### Chrome
 
 1. Open Chrome and navigate to `chrome://extensions`
 2. Enable **Developer mode**
 3. Click **Load unpacked** and select the `extension/` folder from this project
 4. The extension will show in your toolbar — click it and hit **Reconnect** when the MCP server is running
+
+#### Firefox
+
+1. Open Firefox and navigate to `about:debugging#/runtime/this-firefox`
+2. Click **Load Temporary Add-on...**
+3. Select `extension/manifest.json` from this project
+4. The extension will show in your toolbar — click it and hit **Reconnect** when the MCP server is running
+
+> **Note:** Firefox temporary add-ons are removed when Firefox is restarted. To install permanently, the extension needs to be signed through [addons.mozilla.org](https://addons.mozilla.org).
 
 ### Using in your MCP client
 
@@ -108,7 +119,7 @@ Add to your MCP settings (`.cursor/mcp.json` or equivalent):
 ### Connect the browser
 
 1. Start the MCP server (via your MCP client or `node dist/index.js`)
-2. Open Chrome and click the Browser MCP extension icon in the toolbar
+2. Open Chrome/Firefox and click the Browser MCP extension icon in the toolbar
 3. Click **Reconnect** — the extension auto-discovers the server address
 4. The MCP server will detect the connection automatically
 
@@ -219,8 +230,8 @@ src/
     port.ts             # Port utilities
     aria-snapshot.ts    # Accessibility snapshot capture
 extension/
-  background.js         # Chrome extension service worker (36 command handlers)
-  manifest.json         # Extension manifest (MV3)
+  background.js         # Cross-browser service worker (36 command handlers)
+  manifest.json         # Extension manifest (MV3, Chrome + Firefox compatible)
   popup.html            # Extension popup UI
   popup.js              # Popup JavaScript
   icons/                # Extension icons
