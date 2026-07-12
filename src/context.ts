@@ -16,7 +16,7 @@ export class Context {
     return this._ws;
   }
 
-  set ws(ws: WebSocket) {
+  set ws(ws: WebSocket | undefined) {
     this._ws = ws;
   }
 

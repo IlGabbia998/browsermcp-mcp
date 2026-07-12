@@ -54,11 +54,42 @@ export async function createServerWithTools(options: Options): Promise<Server> {
   );
 
   const wss = await createWebSocketServer();
-  wss.on("connection", (websocket) => {
+  wss.on("connection", (websocket, req) => {
+    console.error(`[BrowserMCP] Extension connected from ${req.socket.remoteAddress}:${req.socket.remotePort}`);
     if (context.hasWs()) {
+      console.error("[BrowserMCP] Closing previous extension connection");
       context.ws.close();
     }
     context.ws = websocket;
+
+    websocket.on("message", (data) => {
+      const raw = typeof data === "string" ? data : data.toString();
+      try {
+        const msg = JSON.parse(raw);
+        if (msg.type === "ping") {
+          // Ignore keepalive pings; they are handled by createSocketMessageSender responses
+          return;
+        }
+        console.error(`[BrowserMCP] Message from extension: ${raw.substring(0, 200)}`);
+      } catch {
+        console.error(`[BrowserMCP] Raw message from extension: ${raw.substring(0, 200)}`);
+      }
+    });
+
+    websocket.on("close", (code, reason) => {
+      console.error(`[BrowserMCP] Extension disconnected (code=${code}, reason=${reason?.toString() || ""})`);
+      if (context.ws === websocket) {
+        context.ws = undefined;
+      }
+    });
+
+    websocket.on("error", (err) => {
+      console.error(`[BrowserMCP] Extension socket error: ${err.message}`);
+    });
+  });
+
+  wss.on("error", (err) => {
+    console.error(`[BrowserMCP] WebSocket server error: ${err.message}`);
   });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => {
