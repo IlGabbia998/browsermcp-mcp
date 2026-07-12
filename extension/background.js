@@ -12,6 +12,17 @@ let connected = false;
 let keepaliveTimer = null;
 let fastPollTimer = null;
 let resolvedWsUrl = null;
+let lastError = null;
+let logs = [];
+const MAX_LOGS = 50;
+
+function addLog(level, message) {
+  const entry = { time: new Date().toISOString(), level, message };
+  logs.push(entry);
+  if (logs.length > MAX_LOGS) logs.shift();
+  if (level === "error") console.error("[BrowserMCP]", message);
+  else console.log("[BrowserMCP]", message);
+}
 
 async function resolveWsUrl() {
   if (resolvedWsUrl) return resolvedWsUrl;
@@ -34,17 +45,26 @@ async function connect() {
   if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
 
   const url = await resolveWsUrl();
+  addLog("info", `Connecting to ${url}...`);
+  lastError = null;
+
   try {
     ws = new WebSocket(url);
-  } catch {
+  } catch (e) {
+    lastError = e.message || "Failed to create WebSocket";
+    addLog("error", lastError);
     return;
   }
 
-  ws.onerror = () => {};
+  ws.onerror = (event) => {
+    lastError = `Connection failed to ${url}`;
+    addLog("error", lastError);
+  };
 
   ws.onopen = () => {
     connected = true;
-    console.log("[BrowserMCP] Connected to MCP server");
+    lastError = null;
+    addLog("info", "Connected to MCP server");
     updateBadge(true);
     startKeepalive();
     stopFastPoll();
@@ -66,8 +86,10 @@ async function connect() {
   };
 
   ws.onclose = () => {
+    const wasConnected = connected;
     connected = false;
     ws = null;
+    if (wasConnected) addLog("info", "Disconnected from MCP server");
     updateBadge(false);
     stopKeepalive();
     startFastPoll();
@@ -111,8 +133,37 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type === "getStatus") { sendResponse({ connected }); return true; }
-  if (msg.type === "reconnect") { connect(); sendResponse({ ok: true }); return true; }
+  if (msg.type === "getStatus") {
+    sendResponse({ connected, lastError, url: resolvedWsUrl || DEFAULT_WS_URL });
+    return true;
+  }
+  if (msg.type === "reconnect") {
+    if (ws) { ws.close(); ws = null; }
+    connected = false;
+    stopFastPoll();
+    stopKeepalive();
+    connect();
+    sendResponse({ ok: true });
+    return true;
+  }
+  if (msg.type === "disconnect") {
+    if (ws) { ws.close(); ws = null; }
+    connected = false;
+    stopFastPoll();
+    stopKeepalive();
+    updateBadge(false);
+    addLog("info", "Manually disconnected");
+    sendResponse({ ok: true });
+    return true;
+  }
+  if (msg.type === "getLogs") {
+    sendResponse({ logs });
+    return true;
+  }
+  if (msg.type === "getResolvedUrl") {
+    sendResponse({ url: resolvedWsUrl || DEFAULT_WS_URL });
+    return true;
+  }
 });
 
 // ============================================================

@@ -3,21 +3,84 @@
 <head>
   <meta charset="utf-8">
   <style>
-    body { width: 280px; padding: 16px; font-family: -apple-system, sans-serif; }
-    h3 { margin: 0 0 8px; font-size: 14px; }
-    .status { padding: 8px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; margin-bottom: 12px; }
-    .connected { background: #dcfce7; color: #166534; }
-    .disconnected { background: #fee2e2; color: #991b1b; }
-    button { width: 100%; padding: 8px; border: none; border-radius: 6px; background: #3b82f6; color: white; font-size: 13px; cursor: pointer; }
-    button:hover { background: #2563eb; }
-    .tools { font-size: 11px; color: #666; margin-top: 8px; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { width: 320px; padding: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; background: #fafafa; }
+    
+    .header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+    .header h3 { font-size: 14px; font-weight: 600; }
+    .badge { font-size: 10px; padding: 2px 6px; border-radius: 10px; font-weight: 600; }
+    .badge-on { background: #dcfce7; color: #166534; }
+    .badge-off { background: #fee2e2; color: #991b1b; }
+
+    .status-bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; }
+    .status-connected { background: #dcfce7; border: 1px solid #bbf7d0; }
+    .status-disconnected { background: #fee2e2; border: 1px solid #fecaca; }
+    .status-connecting { background: #fef9c3; border: 1px solid #fde68a; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot-connected { background: #22c55e; }
+    .dot-disconnected { background: #ef4444; }
+    .dot-connecting { background: #eab308; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .status-text { flex: 1; font-weight: 500; }
+    .status-text small { display: block; font-weight: 400; color: #666; font-size: 11px; margin-top: 2px; }
+
+    .toggle-btn { width: 100%; padding: 10px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.2s; margin-bottom: 10px; }
+    .btn-connect { background: #3b82f6; color: white; }
+    .btn-connect:hover { background: #2563eb; }
+    .btn-disconnect { background: #ef4444; color: white; }
+    .btn-disconnect:hover { background: #dc2626; }
+
+    .info-row { display: flex; justify-content: space-between; font-size: 11px; color: #666; margin-bottom: 4px; }
+    .info-row span:last-child { font-family: monospace; color: #333; }
+
+    .section { margin-bottom: 10px; }
+    .section-title { font-size: 11px; font-weight: 600; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; }
+    .section-title .arrow { transition: transform 0.2s; }
+    .section-title .arrow.open { transform: rotate(90deg); }
+
+    .log-container { background: #1e1e1e; border-radius: 6px; padding: 8px; max-height: 120px; overflow-y: auto; display: none; }
+    .log-container.visible { display: block; }
+    .log-entry { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 10px; line-height: 1.5; color: #d4d4d4; white-space: pre-wrap; word-break: break-all; }
+    .log-info { color: #6a9955; }
+    .log-error { color: #f44747; }
+    .log-time { color: #808080; }
+
+    .error-banner { background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; font-size: 11px; color: #991b1b; display: none; }
+    .error-banner.visible { display: block; }
+
+    .footer { text-align: center; font-size: 10px; color: #aaa; margin-top: 8px; }
   </style>
 </head>
 <body>
-  <h3>Browser MCP (Extended)</h3>
-  <div id="status" class="status disconnected">Checking...</div>
-  <button id="reconnect">Reconnect</button>
-  <div class="tools">36+ tools | Port 9009</div>
+  <div class="header">
+    <h3>Browser MCP</h3>
+    <span id="badge" class="badge badge-off">OFF</span>
+  </div>
+
+  <div id="error-banner" class="error-banner"></div>
+
+  <div id="status-bar" class="status-bar status-disconnected">
+    <div id="status-dot" class="status-dot dot-disconnected"></div>
+    <div id="status-text" class="status-text">Checking...</div>
+  </div>
+
+  <button id="toggle-btn" class="toggle-btn btn-connect">Connect</button>
+
+  <div class="section">
+    <div class="info-row"><span>Server</span><span id="info-url">—</span></div>
+    <div class="info-row"><span>Tools</span><span>39</span></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title" id="log-toggle">
+      <span>Connection Log</span>
+      <span class="arrow" id="log-arrow">&#9654;</span>
+    </div>
+    <div id="log-container" class="log-container"></div>
+  </div>
+
+  <div class="footer">v1.0.0 | Chrome &amp; Firefox</div>
+
   <script src="popup.js"></script>
 </body>
 </html>
