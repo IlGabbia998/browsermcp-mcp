@@ -59,12 +59,13 @@ npm run build
 
 #### Firefox
 
-1. Open Firefox and navigate to `about:debugging#/runtime/this-firefox`
-2. Click **Load Temporary Add-on...**
-3. Select `extension/manifest.json` from this project
-4. The extension will show in your toolbar — click it and hit **Reconnect** when the MCP server is running
+1. Copy `extension/manifest.firefox.json` to `extension/manifest.json` (replacing the Chrome one)
+2. Open Firefox and navigate to `about:debugging#/runtime/this-firefox`
+3. Click **Load Temporary Add-on...**
+4. Select `extension/manifest.json` from this project
+5. The extension will show in your toolbar — click it and hit **Connect** when the MCP server is running
 
-> **Note:** Firefox temporary add-ons are removed when Firefox is restarted. To install permanently, the extension needs to be signed through [addons.mozilla.org](https://addons.mozilla.org).
+> **Note:** Chrome and Firefox use different manifest formats for MV3. Use `manifest.json` for Chrome and `manifest.firefox.json` for Firefox. Firefox temporary add-ons are removed when Firefox is restarted.
 
 ### Using in your MCP client
 
