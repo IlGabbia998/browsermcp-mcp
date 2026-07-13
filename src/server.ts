@@ -67,7 +67,10 @@ export async function createServerWithTools(options: Options): Promise<Server> {
       try {
         const msg = JSON.parse(raw);
         if (msg.type === "ping") {
-          // Ignore keepalive pings; they are handled by createSocketMessageSender responses
+          // Respond to client keepalive pings to keep the socket alive through proxies/firewalls.
+          if (websocket.readyState === websocket.OPEN) {
+            websocket.send(JSON.stringify({ type: "pong" }));
+          }
           return;
         }
         console.error(`[BrowserMCP] Message from extension: ${raw.substring(0, 200)}`);

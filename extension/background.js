@@ -4,14 +4,19 @@
 
 const WS_PORT = 9009;
 const DEFAULT_WS_URL = `ws://127.0.0.1:${WS_PORT}`;
-const KEEPALIVE_INTERVAL_MS = 25000;
+const KEEPALIVE_INTERVAL_MS = 20000;
+const RETRY_INTERVAL_MS = 5000;
+const RETRY_BACKOFF_MAX_MS = 60000;
 
 let ws = null;
 let connected = false;
 let keepaliveTimer = null;
+let retryTimer = null;
 let resolvedWsUrl = null;
 let lastError = null;
 let logs = [];
+let autoConnect = false;
+let currentRetryDelay = RETRY_INTERVAL_MS;
 const MAX_LOGS = 50;
 const BANNER_ID = "bmcp-agent-banner";
 let bannerTabs = new Set();
@@ -125,11 +130,65 @@ async function resolveWsUrl() {
 }
 
 // ============================================================
+// Auto-connect state persistence
+// ============================================================
+
+async function loadAutoConnect() {
+  try {
+    const data = await chrome.storage.local.get("autoConnect");
+    autoConnect = data.autoConnect === true;
+  } catch {
+    autoConnect = false;
+  }
+  return autoConnect;
+}
+
+async function saveAutoConnect(value) {
+  autoConnect = value === true;
+  try {
+    await chrome.storage.local.set({ autoConnect: autoConnect });
+  } catch (e) {
+    addLog("error", "Failed to save autoConnect state: " + (e.message || String(e)));
+  }
+}
+
+// ============================================================
 // WebSocket Connection
 // ============================================================
 
+function scheduleReconnect() {
+  stopReconnect();
+  if (!autoConnect || connected) return;
+
+  // Use setInterval for fast retry while the service worker is awake.
+  // MV3 may suspend the worker; the chrome.alarms listener below acts as a wake-up backup.
+  retryTimer = setInterval(() => {
+    if (autoConnect && !connected) connect();
+  }, currentRetryDelay);
+
+  // Create a one-time alarm as a backup wake-up mechanism.
+  // Chrome throttles alarms to at most once per minute, so this is a fallback.
+  try {
+    chrome.alarms.create("bmcp-reconnect", { delayInMinutes: Math.max(1, currentRetryDelay / 60000) });
+  } catch {}
+}
+
+function stopReconnect() {
+  if (retryTimer) { clearInterval(retryTimer); retryTimer = null; }
+  try { chrome.alarms.clear("bmcp-reconnect"); } catch {}
+}
+
+function resetRetryDelay() {
+  currentRetryDelay = RETRY_INTERVAL_MS;
+}
+
+function backoffRetryDelay() {
+  currentRetryDelay = Math.min(currentRetryDelay * 1.5, RETRY_BACKOFF_MAX_MS);
+}
+
 async function connect() {
   if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
+  if (!autoConnect) return;
 
   const url = await resolveWsUrl();
   addLog("info", `Connecting to ${url}...`);
@@ -141,6 +200,7 @@ async function connect() {
   } catch (e) {
     lastError = e.message || "Failed to create WebSocket";
     addLog("error", lastError);
+    backoffRetryDelay();
     return;
   }
 
@@ -152,10 +212,12 @@ async function connect() {
   ws.onopen = async () => {
     connected = true;
     lastError = null;
+    resetRetryDelay();
     addLog("info", "Connected to MCP server");
     updateBadge(true);
     await injectBanner();
     startKeepalive();
+    stopReconnect();
   };
 
   ws.onmessage = async (event) => {
@@ -181,7 +243,35 @@ async function connect() {
     updateBadge(false);
     removeAllBanners();
     stopKeepalive();
+    if (autoConnect) {
+      backoffRetryDelay();
+      scheduleReconnect();
+    }
   };
+}
+
+async function disconnect() {
+  stopReconnect();
+  stopKeepalive();
+  if (ws) {
+    try { ws.close(); } catch {}
+    ws = null;
+  }
+  connected = false;
+  updateBadge(false);
+  removeAllBanners();
+  addLog("info", "Disconnected");
+}
+
+async function enableAutoConnect() {
+  await saveAutoConnect(true);
+  resetRetryDelay();
+  connect();
+}
+
+async function disableAutoConnect() {
+  await saveAutoConnect(false);
+  await disconnect();
 }
 
 function startKeepalive() {
@@ -206,27 +296,35 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   }
 });
 
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "bmcp-reconnect" && autoConnect && !connected) {
+    connect();
+  }
+});
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "getStatus") {
-    sendResponse({ connected, lastError, url: resolvedWsUrl || DEFAULT_WS_URL });
+    sendResponse({ connected, autoConnect, lastError, url: resolvedWsUrl || DEFAULT_WS_URL });
+    return true;
+  }
+  if (msg.type === "setAutoConnect") {
+    if (msg.value) enableAutoConnect();
+    else disableAutoConnect();
+    sendResponse({ ok: true });
     return true;
   }
   if (msg.type === "reconnect") {
-    if (ws) { ws.close(); ws = null; }
-    connected = false;
     resolvedWsUrl = null; // re-read ws-config.json on reconnect
-    stopKeepalive();
-    connect();
+    if (autoConnect) {
+      connect();
+    } else {
+      enableAutoConnect();
+    }
     sendResponse({ ok: true });
     return true;
   }
   if (msg.type === "disconnect") {
-    if (ws) { ws.close(); ws = null; }
-    connected = false;
-    stopKeepalive();
-    updateBadge(false);
-    removeAllBanners();
-    addLog("info", "Manually disconnected");
+    disableAutoConnect();
     sendResponse({ ok: true });
     return true;
   }
@@ -237,6 +335,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "getResolvedUrl") {
     sendResponse({ url: resolvedWsUrl || DEFAULT_WS_URL });
     return true;
+  }
+});
+
+// On startup, read the persisted autoConnect state. If enabled, start connecting.
+loadAutoConnect().then((enabled) => {
+  if (enabled) {
+    resetRetryDelay();
+    connect();
+  } else {
+    updateBadge(false);
   }
 });
 

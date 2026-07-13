@@ -71,7 +71,12 @@ export async function createWebSocketServer(
 
   await writeExtensionConfig(port);
 
-  const wss = new WebSocketServer({ port, host: "0.0.0.0" });
+  const wss = new WebSocketServer({
+    port,
+    host: "0.0.0.0",
+    pingInterval: 30000,
+    pingTimeout: 60000,
+  });
 
   return new Promise((resolve, reject) => {
     wss.once("listening", () => {

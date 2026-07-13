@@ -12,34 +12,47 @@ function formatTime(iso) {
 
 async function updateUI() {
   const status = await sendMessage({ type: "getStatus" });
-  const { connected, lastError, url } = status || {};
+  const { connected, autoConnect, lastError, url } = status || {};
 
   const statusBar = document.getElementById("status-bar");
   const statusDot = document.getElementById("status-dot");
   const statusText = document.getElementById("status-text");
-  const toggleBtn = document.getElementById("toggle-btn");
+  const toggle = document.getElementById("auto-connect-toggle");
+  const toggleDesc = document.getElementById("toggle-desc");
   const badge = document.getElementById("badge");
   const errorBanner = document.getElementById("error-banner");
   const infoUrl = document.getElementById("info-url");
+
+  toggle.checked = !!autoConnect;
 
   if (connected) {
     statusBar.className = "status-bar status-connected";
     statusDot.className = "status-dot dot-connected";
     statusText.innerHTML = "Connected<small>Receiving commands from MCP server</small>";
-    toggleBtn.textContent = "Disconnect";
-    toggleBtn.className = "toggle-btn btn-disconnect";
+    toggleDesc.textContent = "Connected — will reconnect if dropped";
     badge.textContent = "ON";
     badge.className = "badge badge-on";
     errorBanner.className = "error-banner";
+  } else if (autoConnect) {
+    statusBar.className = "status-bar status-connecting";
+    statusDot.className = "status-dot dot-connecting";
+    statusText.innerHTML = "Trying to connect...<small>Auto-retry is enabled</small>";
+    toggleDesc.textContent = "Trying to connect automatically";
+    badge.textContent = "...";
+    badge.className = "badge badge-off";
+    if (lastError) {
+      errorBanner.textContent = lastError;
+      errorBanner.className = "error-banner visible";
+    } else {
+      errorBanner.className = "error-banner";
+    }
   } else {
     statusBar.className = "status-bar status-disconnected";
     statusDot.className = "status-dot dot-disconnected";
-    statusText.innerHTML = "Disconnected<small>Not receiving commands</small>";
-    toggleBtn.textContent = "Connect";
-    toggleBtn.className = "toggle-btn btn-connect";
+    statusText.innerHTML = "Disconnected<small>Auto-connect is off</small>";
+    toggleDesc.textContent = "Reconnect automatically";
     badge.textContent = "OFF";
     badge.className = "badge badge-off";
-
     if (lastError) {
       errorBanner.textContent = lastError;
       errorBanner.className = "error-banner visible";
@@ -65,14 +78,10 @@ async function updateLogs() {
   container.scrollTop = 0;
 }
 
-document.getElementById("toggle-btn").addEventListener("click", async () => {
-  const status = await sendMessage({ type: "getStatus" });
-  if (status?.connected) {
-    await sendMessage({ type: "disconnect" });
-  } else {
-    await sendMessage({ type: "reconnect" });
-  }
-  setTimeout(updateUI, 500);
+document.getElementById("auto-connect-toggle").addEventListener("change", async (e) => {
+  const value = e.target.checked;
+  await sendMessage({ type: "setAutoConnect", value });
+  updateUI();
 });
 
 document.getElementById("log-toggle").addEventListener("click", () => {

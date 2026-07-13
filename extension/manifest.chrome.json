@@ -13,7 +13,9 @@
     "activeTab",
     "tabs",
     "scripting",
-    "cookies"
+    "cookies",
+    "alarms",
+    "storage"
   ],
   "host_permissions": ["<all_urls>"],
   "background": {
