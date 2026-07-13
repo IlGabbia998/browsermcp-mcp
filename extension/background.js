@@ -5,16 +5,16 @@
 const WS_PORT = 9009;
 const DEFAULT_WS_URL = `ws://127.0.0.1:${WS_PORT}`;
 const KEEPALIVE_INTERVAL_MS = 25000;
-const FAST_POLL_INTERVAL_MS = 1500;
 
 let ws = null;
 let connected = false;
 let keepaliveTimer = null;
-let fastPollTimer = null;
 let resolvedWsUrl = null;
 let lastError = null;
 let logs = [];
 const MAX_LOGS = 50;
+const BANNER_ID = "bmcp-agent-banner";
+let bannerTabs = new Set();
 
 function addLog(level, message) {
   const entry = { time: new Date().toISOString(), level, message };
@@ -22,6 +22,92 @@ function addLog(level, message) {
   if (logs.length > MAX_LOGS) logs.shift();
   if (level === "error") console.error("[BrowserMCP]", message);
   else console.log("[BrowserMCP]", message);
+}
+
+// ============================================================
+// Page Control Banner
+// ============================================================
+
+async function injectBanner(tabId) {
+  if (!tabId) {
+    try {
+      const focusedWindow = await chrome.windows.getLastFocused({ windowTypes: ["normal"] });
+      const [activeTab] = await chrome.tabs.query({ active: true, windowId: focusedWindow.id });
+      tabId = activeTab?.id;
+    } catch {
+      return;
+    }
+  }
+  if (!tabId) return;
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    if (!isInjectableUrl(tab.url)) return;
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (id) => {
+        let banner = document.getElementById(id);
+        if (!banner) {
+          banner = document.createElement("div");
+          banner.id = id;
+          banner.innerHTML = `
+            <span style="font-weight:600;">Browser MCP</span>
+            <span style="opacity:0.9;">— this page is being controlled by an agent</span>
+          `;
+          banner.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 2147483647;
+            background: #1e3a8a;
+            color: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
+            line-height: 1.4;
+            padding: 8px 16px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            pointer-events: none;
+            transition: transform 0.2s ease;
+          `;
+          if (document.body) {
+            document.body.appendChild(banner);
+            document.body.style.paddingTop =
+              (parseFloat(getComputedStyle(document.body).paddingTop) || 0) + 36 + "px";
+          }
+        }
+      },
+      args: [BANNER_ID],
+    });
+    bannerTabs.add(tabId);
+  } catch (e) {
+    // Ignore injection failures on restricted/special pages
+  }
+}
+
+async function removeBanner(tabId) {
+  if (!tabId) return;
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (id) => {
+        const banner = document.getElementById(id);
+        if (banner) {
+          banner.remove();
+          document.body.style.paddingTop =
+            Math.max(0, (parseFloat(getComputedStyle(document.body).paddingTop) || 0) - 36) + "px";
+        }
+      },
+      args: [BANNER_ID],
+    });
+  } catch {}
+  bannerTabs.delete(tabId);
+}
+
+async function removeAllBanners() {
+  await Promise.all(Array.from(bannerTabs).map(removeBanner));
+  bannerTabs.clear();
 }
 
 async function resolveWsUrl() {
@@ -46,6 +132,7 @@ async function connect() {
 
   const url = await resolveWsUrl();
   addLog("info", `Connecting to ${url}...`);
+  console.log("[BrowserMCP] Connecting to", url);
   lastError = null;
 
   try {
@@ -66,8 +153,8 @@ async function connect() {
     lastError = null;
     addLog("info", "Connected to MCP server");
     updateBadge(true);
+    injectBanner();
     startKeepalive();
-    stopFastPoll();
   };
 
   ws.onmessage = async (event) => {
@@ -91,22 +178,9 @@ async function connect() {
     ws = null;
     if (wasConnected) addLog("info", "Disconnected from MCP server");
     updateBadge(false);
+    removeAllBanners();
     stopKeepalive();
-    startFastPoll();
   };
-}
-
-function startFastPoll() {
-  stopFastPoll();
-  fastPollTimer = setInterval(() => {
-    if (!connected) connect();
-  }, FAST_POLL_INTERVAL_MS);
-  chrome.alarms.create("browserMcpFastPoll", { periodInMinutes: 1 });
-}
-
-function stopFastPoll() {
-  if (fastPollTimer) { clearInterval(fastPollTimer); fastPollTimer = null; }
-  chrome.alarms.clear("browserMcpFastPoll");
 }
 
 function startKeepalive() {
@@ -114,12 +188,10 @@ function startKeepalive() {
   keepaliveTimer = setInterval(() => {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" }));
   }, KEEPALIVE_INTERVAL_MS);
-  chrome.alarms.create("browserMcpKeepalive", { periodInMinutes: 1 });
 }
 
 function stopKeepalive() {
   if (keepaliveTimer) { clearInterval(keepaliveTimer); keepaliveTimer = null; }
-  chrome.alarms.clear("browserMcpKeepalive");
 }
 
 function updateBadge(isConnected) {
@@ -127,9 +199,10 @@ function updateBadge(isConnected) {
   chrome.action.setBadgeBackgroundColor({ color: isConnected ? "#22c55e" : "#ef4444" });
 }
 
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "browserMcpFastPoll" && !connected) connect();
-  if (alarm.name === "browserMcpKeepalive" && !connected) connect();
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (connected && changeInfo.status === "complete" && bannerTabs.has(tabId) && isInjectableUrl(tab.url)) {
+    injectBanner(tabId);
+  }
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -140,7 +213,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "reconnect") {
     if (ws) { ws.close(); ws = null; }
     connected = false;
-    stopFastPoll();
+    resolvedWsUrl = null; // re-read ws-config.json on reconnect
     stopKeepalive();
     connect();
     sendResponse({ ok: true });
@@ -149,9 +222,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === "disconnect") {
     if (ws) { ws.close(); ws = null; }
     connected = false;
-    stopFastPoll();
     stopKeepalive();
     updateBadge(false);
+    removeAllBanners();
     addLog("info", "Manually disconnected");
     sendResponse({ ok: true });
     return true;
@@ -171,10 +244,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // ============================================================
 
 async function getTargetTab(tabId) {
-  if (tabId != null) return await chrome.tabs.get(tabId);
-  const focusedWindow = await chrome.windows.getLastFocused({ windowTypes: ["normal"] });
-  const [tab] = await chrome.tabs.query({ active: true, windowId: focusedWindow.id });
-  if (!tab) throw new Error("No active tab found in focused window");
+  let tab;
+  if (tabId != null) tab = await chrome.tabs.get(tabId);
+  else {
+    const focusedWindow = await chrome.windows.getLastFocused({ windowTypes: ["normal"] });
+    const [activeTab] = await chrome.tabs.query({ active: true, windowId: focusedWindow.id });
+    if (!activeTab) throw new Error("No active tab found in focused window");
+    tab = activeTab;
+  }
+  if (connected && tab?.id) injectBanner(tab.id);
   return tab;
 }
 
@@ -248,6 +326,7 @@ handlers.browser_navigate = async ({ url }) => {
   const tab = await chrome.tabs.create({ url, active: true });
   if (tab.status !== "complete") await waitForTabLoad(tab.id);
   await new Promise((r) => setTimeout(r, 500));
+  if (connected && tab.id) injectBanner(tab.id);
   return "OK";
 };
 
@@ -517,6 +596,7 @@ handlers.browser_scroll = async ({ direction, amount }) => {
 
 handlers.browser_new_tab = async ({ url }) => {
   const tab = await chrome.tabs.create({ url: url || "about:blank", active: true });
+  if (connected && tab.id) injectBanner(tab.id);
   return { tabId: tab.id, url: tab.url || url || "about:blank" };
 };
 
@@ -795,6 +875,7 @@ handlers.browser_close_tab = async ({ tabId }) => {
 handlers.browser_switch_tab = async ({ tabId }) => {
   const tab = await chrome.tabs.update(tabId, { active: true });
   await chrome.windows.update(tab.windowId, { focused: true });
+  if (connected && tab.id) injectBanner(tab.id);
   return { tabId: tab.id, title: tab.title, url: tab.url };
 };
 
@@ -954,5 +1035,4 @@ handlers.browser_get_computed_style = async ({ selector, properties }) => {
 // Initialize
 // ============================================================
 
-connect();
 updateBadge(false);

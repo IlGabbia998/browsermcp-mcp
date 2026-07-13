@@ -59,13 +59,26 @@ npm run build
 
 #### Firefox
 
+Firefox MV3 requires a different `background` entry than Chrome. You must switch the manifest before loading the extension.
+
+Using the helper script (recommended):
+
+```bash
+npm run use:firefox
+```
+
+Or manually:
+
 1. Copy `extension/manifest.firefox.json` to `extension/manifest.json` (replacing the Chrome one)
+
+Then load it:
+
 2. Open Firefox and navigate to `about:debugging#/runtime/this-firefox`
 3. Click **Load Temporary Add-on...**
 4. Select `extension/manifest.json` from this project
 5. The extension will show in your toolbar — click it and hit **Connect** when the MCP server is running
 
-> **Note:** Chrome and Firefox use different manifest formats for MV3. Use `manifest.json` for Chrome and `manifest.firefox.json` for Firefox. Firefox temporary add-ons are removed when Firefox is restarted.
+> **Note:** Chrome and Firefox use different manifest formats for MV3. Use `manifest.json` for Chrome (default) and run `npm run use:firefox` (or copy `manifest.firefox.json`) for Firefox. Firefox temporary add-ons are removed when Firefox is restarted. To restore the Chrome manifest, run `npm run use:chrome`.
 
 ### Using in your MCP client
 
