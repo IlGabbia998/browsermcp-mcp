@@ -81,8 +81,9 @@ async function injectBanner(tabId) {
       args: [BANNER_ID],
     });
     bannerTabs.add(tabId);
+    addLog("info", `Injected control banner on tab ${tabId}`);
   } catch (e) {
-    // Ignore injection failures on restricted/special pages
+    addLog("error", `Banner injection failed on tab ${tabId}: ${e.message || String(e)}`);
   }
 }
 
@@ -148,12 +149,12 @@ async function connect() {
     addLog("error", lastError);
   };
 
-  ws.onopen = () => {
+  ws.onopen = async () => {
     connected = true;
     lastError = null;
     addLog("info", "Connected to MCP server");
     updateBadge(true);
-    injectBanner();
+    await injectBanner();
     startKeepalive();
   };
 
@@ -199,9 +200,9 @@ function updateBadge(isConnected) {
   chrome.action.setBadgeBackgroundColor({ color: isConnected ? "#22c55e" : "#ef4444" });
 }
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (connected && changeInfo.status === "complete" && bannerTabs.has(tabId) && isInjectableUrl(tab.url)) {
-    injectBanner(tabId);
+    await injectBanner(tabId);
   }
 });
 
@@ -252,7 +253,7 @@ async function getTargetTab(tabId) {
     if (!activeTab) throw new Error("No active tab found in focused window");
     tab = activeTab;
   }
-  if (connected && tab?.id) injectBanner(tab.id);
+  if (connected && tab?.id) await injectBanner(tab.id);
   return tab;
 }
 
@@ -326,7 +327,7 @@ handlers.browser_navigate = async ({ url }) => {
   const tab = await chrome.tabs.create({ url, active: true });
   if (tab.status !== "complete") await waitForTabLoad(tab.id);
   await new Promise((r) => setTimeout(r, 500));
-  if (connected && tab.id) injectBanner(tab.id);
+  if (connected && tab.id) await injectBanner(tab.id);
   return "OK";
 };
 
@@ -596,7 +597,7 @@ handlers.browser_scroll = async ({ direction, amount }) => {
 
 handlers.browser_new_tab = async ({ url }) => {
   const tab = await chrome.tabs.create({ url: url || "about:blank", active: true });
-  if (connected && tab.id) injectBanner(tab.id);
+  if (connected && tab.id) await injectBanner(tab.id);
   return { tabId: tab.id, url: tab.url || url || "about:blank" };
 };
 
@@ -875,7 +876,7 @@ handlers.browser_close_tab = async ({ tabId }) => {
 handlers.browser_switch_tab = async ({ tabId }) => {
   const tab = await chrome.tabs.update(tabId, { active: true });
   await chrome.windows.update(tab.windowId, { focused: true });
-  if (connected && tab.id) injectBanner(tab.id);
+  if (connected && tab.id) await injectBanner(tab.id);
   return { tabId: tab.id, title: tab.title, url: tab.url };
 };
 
